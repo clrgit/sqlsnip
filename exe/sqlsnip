@@ -1,5 +1,64 @@
 #!/usr/bin/env ruby
 
+require 'shellopts'
+require 'indented_io'
+
 require 'sqlsnip.rb'
 
-puts Sqlsnip::VERSION
+SPEC = %(
+  @ Pre-process a SQL snippet
+
+  -- FILE [START [STOP]]
+
+  Prepares a range of lines in a SQL file for execution by adding drop
+  statements for object defined in the range. If the range is absent, the whole
+  file is executed. Prints the resulting SQL script on standard output so it
+  can be piped to psql(1)
+
+  The range is given by a start and a stop line number (inclusive) and is
+  scanned for lines matching 'create' and a drop statement is added for each
+  match. Table, view, function, procedure, and trigger objects are supported.
+  'or replace' definitions does not generate drop statements
+
+  The whole file is also scanned for 'set search_path' statements to determine
+  the current schema at the beginning of the snippet. If not found the schema
+  is determined from the file name. It is assumed that the file exists in a
+  prick(1) directory hierarchy
+
+  Note that the parser is very primitive: It expects the header of the
+  definition to be on one line. It also doesn't know about comments
+
+  EXAMPLE
+
+  sqlsnip can be used to create a vim macro in .vimrcc that executes the
+  selected text or the whole file:
+
+    \\function! ExecuteSqlFile() range
+      let path = expand('%:p')
+      let result = system('sqlsnip' . path . ' | psql')
+      echo result
+    endfunction
+
+    function! ExecuteSqlRange() range
+      let path = expand('%:p')
+      let start_line = line("'<")
+      let end_line = line("'>")
+      let result = system('sqlsnip ' . path . ' ' . start_line . ' ' . end_line . ' | psql')
+      echo result
+    endfunction
+
+    " CTRL+G - execute whole file
+    map <C-G> :call ExecuteSqlFile()<CR>
+
+    " CTRL-X - execute selected range
+    map <C-X> :call ExecuteSqlRange()<CR>
+)
+
+opts, args = ShellOpts.process(SPEC, ARGV)
+file, start_line, stop_line = args.extract(1..3)
+start_line ||= "1"
+stop_line ||= "100000000"
+
+prg = Sqlsnip::Prg.new(file, start_line.to_i, stop_line.to_i)
+prg.run
+
