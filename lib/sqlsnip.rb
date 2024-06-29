@@ -23,6 +23,7 @@ module Sqlsnip
 
     TABLE_RE = /(?:#{TABLE_MODIFIERS_RE}\s+)*table\s+(?:#{IF_NOT_EXISTS_RE}?\s+)?(#{UID_RE})/i
     VIEW_RE = /(?:#{VIEW_MODIFIERS_RE}\s+)*view\s+(#{UID_RE})/i
+    MATERIALIZED_VIEW_RE = /materialized\s+view\s*(#{UID_RE})/i
     FUNCTION_RE = /function\s+(#{UID_RE})\s*\((.*?)\)\s+(?:returns|$)/i
     PROCEDURE_RE = /function\s+(#{UID_RE})\s*\((.*?)\)\s+(?:as|$)/i
     TRIGGER_RE = /trigger\s+(#{UID_RE})\s+.*\s+on\s+(#{UID_RE})/i
@@ -89,6 +90,9 @@ module Sqlsnip
               when TABLE_RE
                 table = $1
                 sql = "drop table if exists #{table} cascade;"
+              when MATERIALIZED_VIEW_RE
+                view = $1
+                sql = "drop materialized view if exists #{view} cascade;"
               when VIEW_RE
                 view = $1
                 sql = "drop view if exists #{view} cascade;"
