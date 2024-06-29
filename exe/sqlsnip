@@ -74,7 +74,7 @@ SPEC = %(
       let save_cursor = getpos('.')
       let range_text = getline(start_line, end_line)
       let path = expand('%:p')
-      let shell_output = system('bundle exec exe/sqlsnip -ds"" ' . path)
+      let shell_output = system('exe/sqlsnip -ds"" ' . path)
       let shell_output_lines = split(shell_output, "\n")
       call deletebufline('%', start_line, end_line)
       call append(start_line - 1, shell_output_lines)
