@@ -68,14 +68,14 @@ SPEC = %(
 
   ...or to just replace the current selected text with drop statements
 
-    \\function! ReplaceSqlRange() range " ChatGPT
+    \\function! ReplaceSqlRange() range
       let start_line = line("'<")
       let end_line = line("'>")
       let save_cursor = getpos('.')
       let range_text = getline(start_line, end_line)
       let path = expand('%:p')
       let shell_output = system('exe/sqlsnip -ds"" ' . path)
-      let shell_output_lines = split(shell_output, "\n")
+      let shell_output_lines = split(shell_output, "\\n")
       call deletebufline('%', start_line, end_line)
       call append(start_line - 1, shell_output_lines)
       call setpos('.', save_cursor)
@@ -83,7 +83,6 @@ SPEC = %(
 
     " CTRL+I - insert drop statements
     map <C-I> :call ReplaceSqlRange()<CR>
-
 )
 
 opts, args = ShellOpts.process(SPEC, ARGV)
@@ -100,4 +99,18 @@ if !opts.drop_only?
   puts
   puts source.lines
 end
+
+__END__
+    \\function! ReplaceSqlRange() range
+      let start_line = line("'<")
+      let end_line = line("'>")
+      let save_cursor = getpos('.')
+      let range_text = getline(start_line, end_line)
+      let path = expand('%:p')
+      let shell_output = system('exe/sqlsnip -ds"" ' . path)
+      let shell_output_lines = split(shell_output, "\n")
+      call deletebufline('%', start_line, end_line)
+      call append(start_line - 1, shell_output_lines)
+      call setpos('.', save_cursor)
+    endfunction
 
