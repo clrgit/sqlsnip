@@ -44,7 +44,7 @@ SPEC = %(
   sqlsnip can be used to create a vim macro in .vimrcc that executes the
   selected text or the whole file:
 
-    function! PrepareSqlRange() range
+    \\function! PrepareSqlRange() range
       let path = expand('%:p')
       let start_line = line("'<")
       let end_line = line("'>")
@@ -68,7 +68,21 @@ SPEC = %(
 
   ...or to just replace the current selected text with drop statements
 
-  TODO
+    \\function! ReplaceSqlRange() range " ChatGPT
+      let start_line = line("'<")
+      let end_line = line("'>")
+      let save_cursor = getpos('.')
+      let range_text = getline(start_line, end_line)
+      let path = expand('%:p')
+      let shell_output = system('bundle exec exe/sqlsnip -ds"" ' . path)
+      let shell_output_lines = split(shell_output, "\n")
+      call deletebufline('%', start_line, end_line)
+      call append(start_line - 1, shell_output_lines)
+      call setpos('.', save_cursor)
+    endfunction
+
+    " CTRL+I - insert drop statements
+    map <C-I> :call ReplaceSqlRange()<CR>
 
 )
 

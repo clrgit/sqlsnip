@@ -145,14 +145,14 @@ module Sqlsnip
       IO.readlines(file).each.with_index { |line, i|
         line.chomp!
         i += 1
-        if start_line.nil?
-          @lines << line
-        elsif i < start_line
-          @search_path_stmt = line if @search_path.nil? && line =~ /^\s*set\s+search_path/
+        break if !stop_line.nil? && i > stop_line
+        next if line =~ /^\s*$/
+        if @lines.empty? && @search_path.nil? && line =~ /^\s*set\s+search_path/
+          @search_path_stmt = line
+        elsif !start_line.nil? && i < start_line
+          ;
         elsif stop_line.nil? || i <= stop_line
           @lines << line
-        else
-          break
         end
       }
     end
