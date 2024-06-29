@@ -1,11 +1,16 @@
 # frozen_string_literal: true
 
+require 'string-text'
+require 'constrain'
+include Constrain
+
 require_relative "sqlsnip/version"
+
 
 module Sqlsnip
   class Error < StandardError; end
   
-  class Prg
+  class Source
     UID_RE = /(?:[.\w]+)/
     TABLE_MODIFIERS_RE = /(?:global|local|temporary|temp|unlogged)/
     VIEW_MODIFIERS_RE = /(?:temp|temporary|recursive)/
@@ -27,80 +32,57 @@ module Sqlsnip
 
     SEARCH_PATH_RE = /^\s*set\s+search_path/
 
-    attr_reader :file, :start_line, :stop_line
-    attr_reader :lines # The selected range of lines
+    # Source file
+    attr_reader :file
 
-    def initialize(file, start_line, stop_line)
+    # Starting and ending line (inclusive). May be nil
+    attr_reader :start_line, :stop_line
+
+    # The selected range of lines as read from the file
+    attr_reader :lines
+
+    # Array of generated statements
+    attr_reader :stmts 
+
+    # Initial search path
+    attr_reader :search_path
+
+    def initialize(file, start_line = nil, stop_line = nil, search_path: nil)
+      constrain file, String
+      constrain start_line, Integer, nil
+      constrain stop_line, Integer, nil
+      constrain search_path, String, nil
       @file, @start_line, @stop_line = file, start_line, stop_line
       File.exist?(@file) or raise Error, "Can't find #{file}"
       @lines = []
-      @initial_search_path = nil
+      @stmts = nil
+      @search_path = search_path
+      if @search_path && !@search_path.empty?
+        @search_path_stmt = "set search_path to #{@search_path};"
+      end
       @project_dir = nil
     end
 
-    def run
+    def parse
       read_lines
-      stmts, has_search_path = generate_drop_statements
-      if !has_search_path
-        search_path = @initial_search_path
-        if search_path.nil?
-          schema = find_schema_from_file(file)
-          search_path = "set search_path to #{schema}"
-        end
-        stmts.unshift search_path
-      end
-
-      puts '\set ON_ERROR_STOP on'
-      puts stmts
-      puts
-      puts lines
+      generate_drop_stmts
+      self
     end
 
-  private
-    attr_reader :initial_search_path, :project_dir
+    def self.parse(*args, **opts) self.new(*args, **opts).parse end
 
-    def read_lines
-      IO.readlines(file).each.with_index { |line, i|
-        i += 1
-        if i < start_line
-          @initial_search_path = line if line =~ /^\s*set\s+search_path/
-        elsif i <= stop_line
-          lines << line
-        else
-          break
-        end
-      }
+    def generate(interactive: false)
+      generate_search_path_stmt if @search_path != ""
+      generate_interactive_stmts if interactive
+      @stmts
     end
 
-    def find_project_dir(path)
-      path = File.absolute_path(path)
-      while !File.exist?(File.join(path, "prick.yml"))
-        path != "/" or raise Error, "Can't find project directory"
-        path = File.dirname(path)
-      end
-      path
-    end
-
-    def find_schema_from_file(file)
-      path = File.dirname(file)
-      project_dir = find_project_dir(File.dirname(file))
-      path = path.delete_prefix(project_dir)
-      if path =~ /schema\/([^\/]+)/
-        schema = $1
-      else
-        schema != "" or raise Error, "Can't find schema from #{file}"
-      end
-      schema
-    end
-
-    def generate_drop_statements
-      has_search_path = false
-      stmts = []
+    def generate_drop_stmts
+      @stmts = []
       for line in lines
         case line
           when /^\s*set\s+search_path/
             sql = line
-            has_search_path = true if stmts.empty?
           when /^\s*create\s+(.*)/
             object = $1
             case object 
@@ -134,9 +116,68 @@ module Sqlsnip
         else
           next
         end
-        stmts << sql
+        @stmts << sql
       end
-      [stmts, has_search_path]
+    end
+
+    # Generate a 'set search_path' statement
+    def generate_search_path_stmt
+      if @search_path == ""
+        return @stmts
+      elsif @search_path_stmt
+        @stmts.unshift @search_path_stmt
+      else
+        schema = find_schema_from_file(file)
+        search_path = "set search_path to #{schema};"
+        @stmts.unshift search_path
+      end
+    end
+
+    def generate_interactive_stmts
+      @stmts.unshift '\set ON_ERROR_STOP on'
+    end
+
+
+  private
+    attr_reader :search_path_stmt, :project_dir
+
+    def read_lines
+      IO.readlines(file).each.with_index { |line, i|
+        line.chomp!
+        i += 1
+        if start_line.nil?
+          @lines << line
+        elsif i < start_line
+          @search_path_stmt = line if @search_path.nil? && line =~ /^\s*set\s+search_path/
+        elsif stop_line.nil? || i <= stop_line
+          @lines << line
+        else
+          break
+        end
+      }
+    end
+
+    # Search upwards in the directory hierarchy for a prick project directory
+    def find_project_dir(path)
+      path = File.absolute_path(path)
+      while !File.exist?(File.join(path, "prick.yml"))
+        path != "/" or raise Error, "Can't find project directory"
+        path = File.dirname(path)
+      end
+      path
+    end
+  
+    # Use the prick source directory structure to find the schema name
+    def find_schema_from_file(file)
+      path = File.dirname(file)
+      project_dir = find_project_dir(File.dirname(file))
+      path = path.delete_prefix(project_dir)
+      if path =~ /schema\/([^\/]+)/
+        schema = $1
+      else
+        schema != "" or raise Error, "Can't find schema from #{file}"
+      end
+      schema
     end
   end
 end

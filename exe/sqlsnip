@@ -11,11 +11,11 @@ SPEC = %(
   -- FILE [START [STOP]]
 
   Prepares a range of lines in a SQL file for execution by adding drop
-  statements for object defined in the range. If the range is absent, the whole
-  file is executed. Prints the resulting SQL script on standard output so it
-  can be piped to psql(1)
+  statements for objects defined in the range. If the range is absent, the
+  whole file is executed. Prints the resulting SQL script on standard output so
+  it can be piped to psql(1)
 
-  The range is given by a start and a stop line number (inclusive) and is
+  The range is given by a start and a stop line number (inclusive). It is
   scanned for lines matching 'create' and a drop statement is added for each
   match. Table, view, function, procedure, and trigger objects are supported.
   'or replace' definitions does not generate drop statements
@@ -28,18 +28,23 @@ SPEC = %(
   Note that the parser is very primitive: It expects the header of the
   definition to be on one line. It also doesn't know about comments
 
+  -i,interactive
+    Emit PSQL session statements (ON_ERROR_STOP)
+
+  -s,schema=SCHEMA?
+    Set initial search path. If SCHEMA is absent no initial search path is
+    emitted. Explicit search path settings in the source are always emitted
+
+  -d,drop-only
+    Only emit drop-statements. Can be used to insert drop statements in the
+    current editor
+
   EXAMPLE
 
   sqlsnip can be used to create a vim macro in .vimrcc that executes the
   selected text or the whole file:
 
-    \\function! ExecuteSqlFile() range
-      let path = expand('%:p')
-      let result = system('sqlsnip' . path . ' | psql')
-      echo result
-    endfunction
-
-    function! ExecuteSqlRange() range
+    function! PrepareSqlRange() range
       let path = expand('%:p')
       let start_line = line("'<")
       let end_line = line("'>")
@@ -47,18 +52,38 @@ SPEC = %(
       echo result
     endfunction
 
-    " CTRL+G - execute whole file
-    map <C-G> :call ExecuteSqlFile()<CR>
-
     " CTRL-X - execute selected range
-    map <C-X> :call ExecuteSqlRange()<CR>
+    map <C-X> :call PrepareSqlRange()<CR>
+
+  ...or the whole file
+
+    \\function! PrepareSqlFile() range
+      let path = expand('%:p')
+      let result = system('sqlsnip' . path . ' | psql')
+      echo result
+    endfunction
+
+    " CTRL+G - execute whole file
+    map <C-G> :call PrepareSqlFile()<CR>
+
+  ...or to just replace the current selected text with drop statements
+
+  TODO
+
 )
 
 opts, args = ShellOpts.process(SPEC, ARGV)
-file, start_line, stop_line = args.extract(1..3)
-start_line ||= "1"
-stop_line ||= "100000000"
+file, start_line, stop_line = args.expect(1..3)
+start_line &&= start_line.to_i
+stop_line &&= stop_line.to_i
 
-prg = Sqlsnip::Prg.new(file, start_line.to_i, stop_line.to_i)
-prg.run
+search_path = opts.schema? ? opts.schema || "" : nil
+
+source = Sqlsnip::Source.parse(file, start_line, stop_line, search_path: search_path)
+puts source.generate(interactive: opts.interactive?)
+
+if !opts.drop_only?
+  puts
+  puts source.lines
+end
 
